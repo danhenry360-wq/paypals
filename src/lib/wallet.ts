@@ -240,7 +240,7 @@ export function seedDemo(): void {
     email: 'alice@demo.io',
     name: 'Alice Demo',
     password: 'password',
-    balance: 250,
+    balance: 0,
     createdAt: Date.now(),
   };
   const bob: User = {
@@ -248,8 +248,52 @@ export function seedDemo(): void {
     email: 'bob@demo.io',
     name: 'Bob Demo',
     password: 'password',
-    balance: 80,
+    balance: 0,
     createdAt: Date.now(),
   };
   saveUsers([alice, bob]);
+
+  // Seed a realistic history of transactions across several days.
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const t = (offsetDays: number, hour = 10): number =>
+    now - offsetDays * DAY + (hour - new Date(now).getHours()) * 60 * 60 * 1000;
+
+  const txns: Txn[] = [
+    // Top-ups
+    { id: uid(), type: 'topup', fromId: alice.id, toId: alice.id, amount: 500, note: 'Bank transfer', status: 'completed', createdAt: t(6, 9) },
+    { id: uid(), type: 'topup', fromId: bob.id, toId: bob.id, amount: 200, note: 'Debit card', status: 'completed', createdAt: t(5, 14) },
+    // Alice sends to Bob (coffee, rent share)
+    { id: uid(), type: 'send', fromId: alice.id, toId: bob.id, amount: 12.5, note: 'Coffee at Blue Bottle', status: 'completed', createdAt: t(4, 8) },
+    { id: uid(), type: 'send', fromId: alice.id, toId: bob.id, amount: 45, note: 'Dinner split', status: 'completed', createdAt: t(3, 19) },
+    // Bob sends to Alice (birthday)
+    { id: uid(), type: 'send', fromId: bob.id, toId: alice.id, amount: 25, note: 'Happy birthday!', status: 'completed', createdAt: t(2, 11) },
+    // Alice top-up again
+    { id: uid(), type: 'topup', fromId: alice.id, toId: alice.id, amount: 100, note: 'Bank transfer', status: 'completed', createdAt: t(2, 9) },
+    // Bob requests from Alice
+    { id: uid(), type: 'request', fromId: bob.id, toId: alice.id, amount: 30, note: 'Concert tickets', status: 'pending', createdAt: t(1, 16) },
+    // Alice sends to Bob today
+    { id: uid(), type: 'send', fromId: alice.id, toId: bob.id, amount: 18.75, note: 'Lunch', status: 'completed', createdAt: t(0, 12) },
+    // Bob top-up today
+    { id: uid(), type: 'topup', fromId: bob.id, toId: bob.id, amount: 50, note: 'Bank transfer', status: 'completed', createdAt: t(0, 8) },
+    // Alice requests from Bob (declined earlier example)
+    { id: uid(), type: 'request', fromId: alice.id, toId: bob.id, amount: 60, note: 'Gift', status: 'declined', createdAt: t(5, 10) },
+  ];
+
+  // Reconcile balances from completed transactions.
+  for (const txn of txns) {
+    if (txn.status !== 'completed') continue;
+    if (txn.type === 'topup') {
+      const u = txn.fromId === alice.id ? alice : bob;
+      u.balance += txn.amount;
+    } else if (txn.type === 'send') {
+      const from = txn.fromId === alice.id ? alice : bob;
+      const to = txn.toId === alice.id ? alice : bob;
+      from.balance -= txn.amount;
+      to.balance += txn.amount;
+    }
+  }
+
+  saveUsers([alice, bob]);
+  saveTxns(txns);
 }
