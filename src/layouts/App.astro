@@ -1,0 +1,48 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  authed?: boolean;
+}
+const { title = 'Paypals', authed = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+  </head>
+  <body>
+    {
+      authed && (
+        <header class="header">
+          <div class="container">
+            <a href="/dashboard" class="brand">Paypals</a>
+            <nav>
+              <a href="/dashboard">Dashboard</a>
+              <a href="/send">Send</a>
+              <a href="/request">Request</a>
+              <a href="/activity">Activity</a>
+              <a href="/profile">Profile</a>
+              <a href="/logout" id="logout-link">Log out</a>
+            </nav>
+          </div>
+        </header>
+      )
+    }
+    <slot />
+
+    <script>
+      document.getElementById('logout-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        import('../lib/wallet').then(({ logout }) => {
+          logout();
+          window.location.href = '/login';
+        });
+      });
+    </script>
+  </body>
+</html>

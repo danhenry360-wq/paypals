@@ -1,0 +1,59 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Activity · Paypals" authed>
+  <div class="container">
+    <div class="card">
+      <h1 style="font-size:1.6rem;">Activity</h1>
+      <div id="list"></div>
+    </div>
+  </div>
+
+  <script>
+    import { getCurrentUser, myTxns, getUser } from '../lib/wallet';
+    const user = getCurrentUser();
+    if (!user) window.location.href = '/login';
+    const meId = user!.id;
+
+    function escapeHtml(s: string): string {
+      return s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]!));
+    }
+
+    function render() {
+      const txns = myTxns();
+      const root = document.getElementById('list')!;
+      if (txns.length === 0) {
+        root.innerHTML = '<p class="muted">No transactions yet.</p>';
+        return;
+      }
+      root.innerHTML = txns.map((t) => {
+        const other = getUser(t.fromId === meId ? t.toId : t.fromId);
+        const otherName = other?.name ?? 'Unknown';
+        const isIn = t.toId === meId;
+        const sign = isIn ? '+' : '-';
+        const cls = t.status === 'pending' ? 'pending' : isIn ? 'in' : 'out';
+        const amount = `${sign}$${t.amount.toFixed(2)}`;
+        const label =
+          t.type === 'topup'
+            ? 'Added money'
+            : t.type === 'send'
+              ? (isIn ? `Received from ${otherName}` : `Sent to ${otherName}`)
+              : (isIn ? `Request from ${otherName}` : `You requested ${otherName}`);
+        return `
+          <div class="txn">
+            <div class="meta">
+              <span class="title">${label}</span>
+              <span class="sub">${new Date(t.createdAt).toLocaleString()}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
+              <span class="amt ${cls}">${amount}</span>
+              <span class="chip ${t.status}">${t.status}</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    render();
+  </script>
+</App>

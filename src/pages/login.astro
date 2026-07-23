@@ -1,0 +1,43 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Log in · Paypals">
+  <div class="container" style="max-width:420px; padding-top:3rem;">
+    <div class="card">
+      <h1 style="font-size:1.6rem;">Log in</h1>
+      <div id="alert"></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password" />
+        </div>
+        <button class="btn full" type="submit">Log in</button>
+      </form>
+      <p class="muted" style="font-size:0.85rem; margin-top:1rem;">
+        Demo accounts: <code>alice@demo.io</code> / <code>bob@demo.io</code>, password <code>password</code>.
+      </p>
+      <p style="margin-top:1rem;">No account? <a href="/signup">Sign up</a></p>
+    </div>
+  </div>
+
+  <script>
+    import { login, seedDemo } from '../lib/wallet';
+    seedDemo();
+    const form = document.getElementById('login-form') as HTMLFormElement;
+    const alert = document.getElementById('alert')!;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      try {
+        login(String(fd.get('email')), String(fd.get('password')));
+        window.location.href = '/dashboard';
+      } catch (err) {
+        alert.innerHTML = `<div class="alert error">${(err as Error).message}</div>`;
+      }
+    });
+  </script>
+</App>

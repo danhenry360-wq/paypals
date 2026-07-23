@@ -1,0 +1,87 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Dashboard · Paypals" authed>
+  <div class="container">
+    <div class="card">
+      <p class="muted" style="margin:0;">Available balance</p>
+      <div class="balance" id="balance">$0.00</div>
+      <div class="row" style="margin-top:1rem;">
+        <a class="btn" href="/send">Send</a>
+        <a class="btn secondary" href="/request">Request</a>
+        <button class="btn secondary" id="topup">Add money</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h2 style="margin:0;">Recent activity</h2>
+        <a href="/activity">See all</a>
+      </div>
+      <div id="recent" style="margin-top:0.5rem;"></div>
+    </div>
+  </div>
+
+  <script>
+    import { getCurrentUser, myTxns, getUser, topUp } from '../lib/wallet';
+    const user = getCurrentUser();
+    if (!user) window.location.href = '/login';
+
+    function render() {
+      const u = getCurrentUser()!;
+      document.getElementById('balance')!.textContent =
+        '$' + u.balance.toFixed(2);
+      const txns = myTxns().slice(0, 5);
+      const root = document.getElementById('recent')!;
+      if (txns.length === 0) {
+        root.innerHTML = '<p class="muted">No transactions yet.</p>';
+        return;
+      }
+      root.innerHTML = txns.map((t) => renderTxn(t, u.id)).join('');
+    }
+
+    function renderTxn(t: any, meId: string): string {
+      const other = getUser(t.fromId === meId ? t.toId : t.fromId);
+      const otherName = other?.name ?? 'Unknown';
+      const isIn = t.toId === meId;
+      const sign = isIn ? '+' : '-';
+      const cls = t.status === 'pending' ? 'pending' : isIn ? 'in' : 'out';
+      const amount = `${sign}$${t.amount.toFixed(2)}`;
+      const label =
+        t.type === 'topup'
+          ? 'Added money'
+          : t.type === 'send'
+            ? (isIn ? `Received from ${otherName}` : `Sent to ${otherName}`)
+            : (isIn ? `Request from ${otherName}` : `You requested ${otherName}`);
+      return `
+        <div class="txn">
+          <div class="meta">
+            <span class="title">${label}</span>
+            <span class="sub">${new Date(t.createdAt).toLocaleString()}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
+            <span class="amt ${cls}">${amount}</span>
+            <span class="chip ${t.status}">${t.status}</span>
+          </div>
+        </div>`;
+    }
+
+    function escapeHtml(s: string): string {
+      return s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]!));
+    }
+
+    document.getElementById('topup')?.addEventListener('click', () => {
+      const amt = Number(prompt('Add how much? (USD)', '50'));
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      try {
+        topUp(amt);
+        render();
+      } catch (err) {
+        alert((err as Error).message);
+      }
+    });
+
+    render();
+  </script>
+</App>

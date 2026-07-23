@@ -1,0 +1,51 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Send money · Paypals" authed>
+  <div class="container" style="max-width:480px;">
+    <div class="card">
+      <h1 style="font-size:1.6rem;">Send money</h1>
+      <div id="alert"></div>
+      <form id="send-form">
+        <div class="field">
+          <label for="to">Recipient email</label>
+          <input id="to" name="to" type="email" required placeholder="bob@demo.io" />
+        </div>
+        <div class="field">
+          <label for="amount">Amount (USD)</label>
+          <input id="amount" name="amount" type="number" min="0.01" step="0.01" required />
+        </div>
+        <div class="field">
+          <label for="note">Note (optional)</label>
+          <input id="note" name="note" placeholder="What's it for?" />
+        </div>
+        <button class="btn full" type="submit">Send payment</button>
+      </form>
+      <p class="muted" style="font-size:0.85rem; margin-top:1rem;">
+        Available: <span id="avail">$0.00</span>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    import { getCurrentUser, sendMoney } from '../lib/wallet';
+    const user = getCurrentUser();
+    if (!user) window.location.href = '/login';
+    document.getElementById('avail')!.textContent =
+      '$' + (user?.balance ?? 0).toFixed(2);
+
+    const form = document.getElementById('send-form') as HTMLFormElement;
+    const alert = document.getElementById('alert')!;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const amount = Number(fd.get('amount'));
+      try {
+        sendMoney(String(fd.get('to')), amount, String(fd.get('note') ?? ''));
+        window.location.href = '/dashboard';
+      } catch (err) {
+        alert.innerHTML = `<div class="alert error">${(err as Error).message}</div>`;
+      }
+    });
+  </script>
+</App>

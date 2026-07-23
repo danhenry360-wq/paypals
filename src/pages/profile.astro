@@ -1,0 +1,31 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Profile · Paypals" authed>
+  <div class="container" style="max-width:480px;">
+    <div class="card">
+      <h1 style="font-size:1.6rem;">Profile</h1>
+      <div id="profile"></div>
+      <button class="btn danger" id="reset">Reset demo data</button>
+    </div>
+  </div>
+
+  <script>
+    import { getCurrentUser } from '../lib/wallet';
+    const user = getCurrentUser();
+    if (!user) window.location.href = '/login';
+
+    document.getElementById('profile')!.innerHTML = `
+      <p><span class="muted">Name</span><br />${user!.name}</p>
+      <p><span class="muted">Email</span><br />${user!.email}</p>
+      <p><span class="muted">Available balance</span><br /><strong>$${user!.balance.toFixed(2)}</strong></p>`;
+
+    document.getElementById('reset')?.addEventListener('click', () => {
+      if (!confirm('Erase all local demo data?')) return;
+      localStorage.removeItem('pp.users');
+      localStorage.removeItem('pp.txns');
+      localStorage.removeItem('pp.session');
+      window.location.href = '/';
+    });
+  </script>
+</App>

@@ -1,0 +1,96 @@
+---
+import App from '../layouts/App.astro';
+---
+<App title="Request money · Paypals" authed>
+  <div class="container" style="max-width:480px;">
+    <div class="card">
+      <h1 style="font-size:1.6rem;">Request money</h1>
+      <div id="alert"></div>
+      <form id="req-form">
+        <div class="field">
+          <label for="from">Request from (email)</label>
+          <input id="from" name="from" type="email" required placeholder="alice@demo.io" />
+        </div>
+        <div class="field">
+          <label for="amount">Amount (USD)</label>
+          <input id="amount" name="amount" type="number" min="0.01" step="0.01" required />
+        </div>
+        <div class="field">
+          <label for="note">Note (optional)</label>
+          <input id="note" name="note" />
+        </div>
+        <button class="btn full" type="submit">Send request</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.2rem;">Pending requests for you</h2>
+      <div id="incoming"></div>
+    </div>
+  </div>
+
+  <script>
+    import { getCurrentUser, requestMoney, myTxns, getUser, fulfillRequest, declineRequest } from '../lib/wallet';
+    const user = getCurrentUser();
+    if (!user) window.location.href = '/login';
+
+    const form = document.getElementById('req-form') as HTMLFormElement;
+    const alert = document.getElementById('alert')!;
+    const incoming = document.getElementById('incoming')!;
+
+    function renderIncoming() {
+      const me = getCurrentUser()!;
+      const pending = myTxns().filter((t) => t.type === 'request' && t.toId === me.id && t.status === 'pending');
+      if (pending.length === 0) {
+        incoming.innerHTML = '<p class="muted">No one has asked you for money.</p>';
+        return;
+      }
+      incoming.innerHTML = pending.map((t) => {
+        const from = getUser(t.fromId);
+        return `
+          <div class="txn">
+            <div class="meta">
+              <span class="title">${from?.name ?? 'Unknown'} requested</span>
+              <span class="sub">$${t.amount.toFixed(2)}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+            </div>
+            <div class="row">
+              <button class="btn" data-pay="${t.id}">Pay</button>
+              <button class="btn secondary" data-decline="${t.id}">Decline</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function escapeHtml(s: string): string {
+      return s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]!));
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      try {
+        requestMoney(String(fd.get('from')), Number(fd.get('amount')), String(fd.get('note') ?? ''));
+        form.reset();
+        renderIncoming();
+        alert.innerHTML = `<div class="alert success">Request sent.</div>`;
+      } catch (err) {
+        alert.innerHTML = `<div class="alert error">${(err as Error).message}</div>`;
+      }
+    });
+
+    incoming.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const pay = t.dataset.pay;
+      const decline = t.dataset.decline;
+      if (pay) {
+        try { fulfillRequest(pay); } catch (err) { alert((err as Error).message); return; }
+      } else if (decline) {
+        declineRequest(decline);
+      }
+      renderIncoming();
+    });
+
+    renderIncoming();
+  </script>
+</App>
