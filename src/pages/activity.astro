@@ -3,9 +3,38 @@ import App from '../layouts/App.astro';
 ---
 <App title="Activity · PayPal" authed>
   <div class="container">
-    <div class="card">
-      <h1 style="font-size:1.6rem;">Activity</h1>
+    <div class="card activity-header">
+      <div>
+        <h1 style="font-size:1.6rem; margin:0;">Activity</h1>
+        <p class="muted" style="margin:0.25rem 0 0;">All your payments, requests, and transfers.</p>
+      </div>
+      <div class="row" style="flex:1; min-width:240px; gap:0.5rem;">
+        <input id="search" type="search" placeholder="Search by name, email, or note" />
+        <select id="filter">
+          <option value="all">All</option>
+          <option value="send">Payments</option>
+          <option value="request">Requests</option>
+          <option value="topup">Top-ups</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;">
       <div id="list"></div>
+      <div id="empty" class="empty-state" style="display:none;">
+        <p class="muted">No transactions match your filters.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawer" class="drawer" style="display:none;">
+    <div class="drawer-backdrop" data-close></div>
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <h2 id="d-title">Transaction</h2>
+        <button class="icon-btn" data-close aria-label="Close">×</button>
+      </div>
+      <div id="d-body"></div>
     </div>
   </div>
 
@@ -15,45 +44,209 @@ import App from '../layouts/App.astro';
     if (!user) window.location.href = '/login';
     const meId = user!.id;
 
+    const search = document.getElementById('search') as HTMLInputElement;
+    const filter = document.getElementById('filter') as HTMLSelectElement;
+    const list = document.getElementById('list')!;
+    const empty = document.getElementById('empty')!;
+    const drawer = document.getElementById('drawer')!;
+
     function escapeHtml(s: string): string {
-      return s.replace(/[&<>"']/g, (c) =>
-        ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]!));
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    }
+
+    function dayKey(ts: number): string {
+      const d = new Date(ts);
+      const today = new Date();
+      const yest = new Date(); yest.setDate(today.getDate() - 1);
+      const sameDay = (a: Date, b: Date) =>
+        a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      if (sameDay(d, today)) return 'Today';
+      if (sameDay(d, yest)) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function iconFor(t: any, isIn: boolean): string {
+      if (t.type === 'topup') return '＋';
+      if (t.type === 'request') return '⟳';
+      return isIn ? '↓' : '↑';
+    }
+
+    function renderTxn(t: any, idx: number): string {
+      const other = getUser(t.fromId === meId ? t.toId : t.fromId);
+      const otherName = other?.name ?? 'Unknown';
+      const otherEmail = other?.email ?? '';
+      const isIn = t.toId === meId;
+      const sign = isIn ? '+' : '-';
+      const cls = t.status === 'pending' ? 'pending' : isIn ? 'in' : 'out';
+      const amount = `${sign}$${t.amount.toFixed(2)}`;
+      const label =
+        t.type === 'topup'
+          ? 'Added money'
+          : t.type === 'send'
+            ? (isIn ? `Received from ${otherName}` : `Sent to ${otherName}`)
+            : (isIn ? `Request from ${otherName}` : `You requested ${otherName}`);
+      const sub = new Date(t.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return `
+        <div class="txn" data-idx="${idx}">
+          <div class="txn-left">
+            <span class="txn-icon ${cls}">${iconFor(t, isIn)}</span>
+            <div class="meta">
+              <span class="title">${escapeHtml(label)}</span>
+              <span class="sub">${sub}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+            </div>
+          </div>
+          <div class="txn-right">
+            <span class="amt ${cls}">${amount}</span>
+            <span class="chip ${t.status}">${t.status}</span>
+          </div>
+        </div>`;
+    }
+
+    function groupByDay(txns: any[]): { key: string; items: any[] }[] {
+      const groups: Record<string, any[]> = {};
+      for (const t of txns) {
+        const k = dayKey(t.createdAt);
+        (groups[k] ??= []).push(t);
+      }
+      return Object.entries(groups).map(([key, items]) => ({ key, items }));
+    }
+
+    function matches(t: any): boolean {
+      if (filter.value !== 'all' && t.type !== filter.value) return false;
+      const q = search.value.trim().toLowerCase();
+      if (!q) return true;
+      const other = getUser(t.fromId === meId ? t.toId : t.fromId);
+      const hay = [t.note ?? '', other?.name ?? '', other?.email ?? ''].join(' ').toLowerCase();
+      return hay.includes(q);
     }
 
     function render() {
-      const txns = myTxns();
-      const root = document.getElementById('list')!;
-      if (txns.length === 0) {
-        root.innerHTML = '<p class="muted">No transactions yet.</p>';
+      const all = myTxns();
+      const filtered = all.map((t, i) => ({ t, i })).filter(({ t }) => matches(t)).map(({ t, i }) => ({ ...t, _idx: i }));
+      if (filtered.length === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
         return;
       }
-      root.innerHTML = txns.map((t) => {
-        const other = getUser(t.fromId === meId ? t.toId : t.fromId);
-        const otherName = other?.name ?? 'Unknown';
-        const isIn = t.toId === meId;
-        const sign = isIn ? '+' : '-';
-        const cls = t.status === 'pending' ? 'pending' : isIn ? 'in' : 'out';
-        const amount = `${sign}$${t.amount.toFixed(2)}`;
-        const label =
-          t.type === 'topup'
-            ? 'Added money'
-            : t.type === 'send'
-              ? (isIn ? `Received from ${otherName}` : `Sent to ${otherName}`)
-              : (isIn ? `Request from ${otherName}` : `You requested ${otherName}`);
-        return `
-          <div class="txn">
-            <div class="meta">
-              <span class="title">${label}</span>
-              <span class="sub">${new Date(t.createdAt).toLocaleString()}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
-            </div>
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
-              <span class="amt ${cls}">${amount}</span>
-              <span class="chip ${t.status}">${t.status}</span>
-            </div>
-          </div>`;
-      }).join('');
+      empty.style.display = 'none';
+      const groups = groupByDay(filtered);
+      list.innerHTML = groups.map((g) => `
+        <div class="day-group">
+          <div class="day-label">${escapeHtml(g.key)}</div>
+          ${g.items.map((t) => renderTxn(t, t._idx)).join('')}
+        </div>`).join('');
     }
+
+    function openDrawer(idx: number) {
+      const t = myTxns()[idx];
+      if (!t) return;
+      const other = getUser(t.fromId === meId ? t.toId : t.fromId);
+      const isIn = t.toId === meId;
+      const sign = isIn ? '+' : '-';
+      const cls = t.status === 'pending' ? 'pending' : isIn ? 'in' : 'out';
+      const title =
+        t.type === 'topup' ? 'Top-up' :
+        t.type === 'send' ? (isIn ? 'Payment received' : 'Payment sent') :
+        (isIn ? 'Money requested' : 'Request sent');
+      document.getElementById('d-title')!.textContent = title;
+      const rows = [
+        ['Status', `<span class="chip ${t.status}">${t.status}</span>`],
+        ['Amount', `<strong class="amt ${cls}">${sign}$${t.amount.toFixed(2)}</strong>`],
+        t.type !== 'topup' ? ['Name', escapeHtml(other?.name ?? 'Unknown')] : null,
+        t.type !== 'topup' ? ['Email', escapeHtml(other?.email ?? '—')] : null,
+        ['Type', t.type === 'topup' ? 'Top-up' : t.type === 'send' ? 'Payment' : 'Request'],
+        ['Date', new Date(t.createdAt).toLocaleString()],
+        ['Transaction ID', `<code>${t.id}</code>`],
+      ].filter(Boolean) as [string, string][];
+      document.getElementById('d-body')!.innerHTML = `
+        <div class="d-amount"><span class="amt ${cls}">${sign}$${t.amount.toFixed(2)}</span></div>
+        ${rows.map(([k, v]) => `<div class="d-row"><div class="d-k">${k}</div><div class="d-v">${v}</div></div>`).join('')}
+        ${t.note ? `<div class="d-note"><div class="d-k">Note</div><div class="d-v">${escapeHtml(t.note)}</div></div>` : ''}`;
+      drawer.style.display = 'flex';
+    }
+
+    list.addEventListener('click', (e) => {
+      const row = (e.target as HTMLElement).closest('.txn') as HTMLElement | null;
+      if (row?.dataset.idx != null) openDrawer(Number(row.dataset.idx));
+    });
+
+    drawer.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).dataset.close != null || (e.target as HTMLElement).closest('[data-close]')) {
+        drawer.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') drawer.style.display = 'none';
+    });
+
+    search.addEventListener('input', render);
+    filter.addEventListener('change', render);
 
     render();
   </script>
+
+  <style is:global>
+    .activity-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .empty-state { padding: 2rem; text-align: center; }
+    .day-group { padding: 0.5rem 1.25rem; }
+    .day-group + .day-group { border-top: 1px solid var(--border); }
+    .day-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      padding: 0.5rem 0;
+    }
+    .txn { cursor: pointer; border-radius: 10px; padding: 0.85rem 0.5rem; }
+    .txn:hover { background: rgba(0, 112, 186, 0.05); }
+    .txn-left { display: flex; align-items: center; gap: 0.85rem; flex: 1; min-width: 0; }
+    .txn-right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
+    .txn-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; border-radius: 50%;
+      font-size: 1.1rem; font-weight: 700; flex-shrink: 0;
+      background: #eef2f7; color: var(--muted);
+    }
+    .txn-icon.in { background: #e7f6ec; color: var(--success); }
+    .txn-icon.out { background: #eaf3fb; color: var(--primary); }
+    .txn-icon.pending { background: #fff3d6; color: #8a6300; }
+    .txn .meta { min-width: 0; }
+    .txn .meta .title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .drawer { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-end; }
+    .drawer-backdrop { position: absolute; inset: 0; background: rgba(15,35,60,0.4); }
+    .drawer-panel {
+      position: relative; width: 100%; max-width: 420px; height: 100%;
+      background: #fff; box-shadow: -8px 0 24px rgba(0,0,0,0.12);
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .drawer-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.25rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff;
+    }
+    .icon-btn {
+      background: none; border: none; font-size: 1.6rem; line-height: 1;
+      color: var(--muted); cursor: pointer; padding: 0 0.5rem;
+    }
+    .icon-btn:hover { color: var(--text); }
+    #d-body { padding: 1.25rem; }
+    .d-amount { text-align: center; padding: 1rem 0 1.5rem; }
+    .d-amount .amt { font-size: 2rem; }
+    .d-row, .d-note {
+      display: flex; justify-content: space-between; gap: 1rem;
+      padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+    }
+    .d-k { color: var(--muted); font-size: 0.9rem; }
+    .d-v { text-align: right; word-break: break-word; }
+    .d-v code { font-size: 0.8rem; background: #eef2f7; padding: 0.15rem 0.4rem; border-radius: 6px; }
+  </style>
 </App>

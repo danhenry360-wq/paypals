@@ -40,6 +40,12 @@ import App from '../layouts/App.astro';
       root.innerHTML = txns.map((t) => renderTxn(t, u.id)).join('');
     }
 
+    function iconFor(t: any, isIn: boolean): string {
+      if (t.type === 'topup') return '＋';
+      if (t.type === 'request') return '⟳';
+      return isIn ? '↓' : '↑';
+    }
+
     function renderTxn(t: any, meId: string): string {
       const other = getUser(t.fromId === meId ? t.toId : t.fromId);
       const otherName = other?.name ?? 'Unknown';
@@ -55,9 +61,12 @@ import App from '../layouts/App.astro';
             : (isIn ? `Request from ${otherName}` : `You requested ${otherName}`);
       return `
         <div class="txn">
-          <div class="meta">
-            <span class="title">${label}</span>
-            <span class="sub">${new Date(t.createdAt).toLocaleString()}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+          <div class="txn-left">
+            <span class="txn-icon ${cls}">${iconFor(t, isIn)}</span>
+            <div class="meta">
+              <span class="title">${label}</span>
+              <span class="sub">${new Date(t.createdAt).toLocaleString()}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+            </div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
             <span class="amt ${cls}">${amount}</span>
