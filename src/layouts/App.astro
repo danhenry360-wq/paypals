@@ -5,7 +5,7 @@ interface Props {
   title?: string;
   authed?: boolean;
 }
-const { title = 'Paypals', authed = false } = Astro.props;
+const { title = 'PayPal', authed = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -20,7 +20,13 @@ const { title = 'Paypals', authed = false } = Astro.props;
       authed && (
         <header class="header">
           <div class="container">
-            <a href="/dashboard" class="brand">Paypals</a>
+            <a href="/dashboard" class="brand">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style="vertical-align:middle; margin-right:0.4rem;" aria-hidden="true">
+                <path d="M7 4h7.2c3.6 0 5.8 1.6 5.8 4.7 0 2.4-1.5 3.9-3.7 4.3 2 .3 3.7 1.6 3.7 4.2 0 3.3-2.6 4.8-6.3 4.8H7V4z" fill="#253b80"/>
+                <path d="M7 4h7.2c3.6 0 5.8 1.6 5.8 4.7 0 2.4-1.5 3.9-3.7 4.3 2 .3 3.7 1.6 3.7 4.2 0 3.3-2.6 4.8-6.3 4.8H7V4z" fill="#179bd7" transform="translate(2.5 1.5)" opacity="0.85"/>
+              </svg>
+              <span>PayPal</span>
+            </a>
             <nav>
               <a href="/dashboard">Dashboard</a>
               <a href="/send">Send</a>
